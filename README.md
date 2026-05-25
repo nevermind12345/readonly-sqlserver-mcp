@@ -1,13 +1,13 @@
 # readonly-sqlserver-mcp
 
-Read-only SQL Server inspection CLI and core library for Mediconnect dev/test databases.
+Read-only SQL Server inspection CLI and core library for approved dev/test databases.
 
 The current milestone is a CLI that exercises the same core code a future MCP server wrapper will expose to Codex. The project is intentionally conservative: SQL Server permissions are the primary safety boundary, and application-side checks are an extra guardrail.
 
 ## Status
 
 - CLI/core scaffold is implemented.
-- MCP wrapper is not implemented yet.
+- MCP stdio wrapper is implemented.
 - Local validation currently passes with Node.js/npm available.
 - Runtime dependency audit is clean with `npm audit --omit=dev`.
 - Full audit currently reports dev-only Vitest/Vite/esbuild findings; do not force-upgrade unless you want a separate dependency update pass.
@@ -16,7 +16,7 @@ The current milestone is a CLI that exercises the same core code a future MCP se
 
 Use a dedicated SQL login with read-only permissions. This is mandatory. Query validation reduces mistakes, but it must not be treated as a substitute for database permissions.
 
-This tool is intended for known Mediconnect dev/test databases. Do not point it at production unless the account, network path, and access policy have been explicitly approved.
+This tool is intended for known dev/test databases. Do not point it at production unless the account, network path, and access policy have been explicitly approved.
 
 Safety defaults:
 
@@ -72,7 +72,7 @@ SQLSERVER_SERVER=localhost
 SQLSERVER_PORT=1433
 SQLSERVER_USER=readonly_login
 SQLSERVER_PASSWORD=change-me
-SQLSERVER_ALLOWED_DATABASES=MEDICONNECT2_DCMSVR
+SQLSERVER_ALLOWED_DATABASES=APP_DEV_DB
 SQLSERVER_ENCRYPT=false
 SQLSERVER_TRUST_SERVER_CERTIFICATE=true
 SQLSERVER_DEFAULT_MAX_ROWS=200
@@ -109,24 +109,24 @@ Start with metadata commands:
 
 ```powershell
 npm run cli -- list-databases
-npm run cli -- db-info MEDICONNECT2_DCMSVR
-npm run cli -- list-schemas MEDICONNECT2_DCMSVR
-npm run cli -- list-tables MEDICONNECT2_DCMSVR RES
+npm run cli -- db-info APP_DEV_DB
+npm run cli -- list-schemas APP_DEV_DB
+npm run cli -- list-tables APP_DEV_DB dbo
 ```
 
 Then inspect objects:
 
 ```powershell
-npm run cli -- describe-table MEDICONNECT2_DCMSVR RES vDICOM_PATH
-npm run cli -- describe-view MEDICONNECT2_DCMSVR RES vDICOM_PATH
-npm run cli -- get-routine MEDICONNECT2_DCMSVR dbo usp_GenerateMWLAccessionNumber
-npm run cli -- search-modules MEDICONNECT2_DCMSVR TRY_CONVERT
+npm run cli -- describe-table APP_DEV_DB dbo ExampleTable
+npm run cli -- describe-view APP_DEV_DB dbo ExampleView
+npm run cli -- get-routine APP_DEV_DB dbo ExampleProcedure
+npm run cli -- search-modules APP_DEV_DB ExampleSearchText
 ```
 
 Use ad-hoc query only when the structured tools are not enough:
 
 ```powershell
-npm run cli -- query MEDICONNECT2_DCMSVR "SELECT TOP 20 DicomPathID, TABLE_ID FROM RES.vDICOM_PATH ORDER BY DicomPathID DESC"
+npm run cli -- query APP_DEV_DB "SELECT TOP 20 name FROM sys.tables ORDER BY name"
 ```
 
 ## CLI Commands
@@ -155,17 +155,59 @@ After building, the package bin name is:
 readonly-sqlserver
 ```
 
+## MCP Server
+
+The MCP server is a stdio wrapper around the same shared core used by the CLI. It does not duplicate SQL safety logic.
+
+Build before registering with Codex:
+
+```powershell
+npm run build
+```
+
+Run locally over stdio only when `.env` is configured:
+
+```powershell
+npm run mcp
+```
+
+The MCP server exposes these tools:
+
+```text
+list_databases
+get_database_info
+list_schemas
+list_tables
+describe_table
+describe_view
+get_routine_definition
+search_sql_modules
+run_select_query
+```
+
+To register with Codex, add this to `C:\Users\<you>\.codex\config.toml`:
+
+```toml
+[mcp_servers.readonly_sqlserver]
+command = 'C:\Program Files\nodejs\node.exe'
+args = ['D:\MCP\readonly-sqlserver-mcp\dist\mcpServer.js']
+startup_timeout_sec = 30
+```
+
+Then restart Codex. Keep `D:\MCP\readonly-sqlserver-mcp\.env` local and uncommitted; the MCP server loads it from the project root.
+
 ## Project Layout
 
 ```text
 src/cli.ts                 CLI entrypoint and argument handling
+src/mcpServer.ts           MCP stdio server entrypoint
 src/config.ts              Environment parsing and database allowlist checks
 src/sqlClient.ts           SQL Server connection helpers
 src/safety.ts              Ad-hoc query safety validation
 src/tools/schemaTools.ts   Database/schema/table/view inspection tools
 src/tools/routineTools.ts  Routine and SQL module inspection tools
 src/tools/queryTools.ts    Bounded ad-hoc SELECT execution
-src/index.ts               Public core exports for the future MCP wrapper
+src/index.ts               Public core exports
 test/safety.test.ts        Query safety tests
 ```
 
@@ -193,9 +235,9 @@ dist/
 *.log
 ```
 
-## Future MCP Wrapper
+## MCP Wrapper Notes
 
-The MCP wrapper should call the core functions exported from `src/index.ts`. Prefer structured tools first:
+The MCP wrapper calls the core functions exported from `src/index.ts`. Prefer structured tools first:
 
 - `listDatabases`
 - `getDatabaseInfo`
@@ -205,4 +247,4 @@ The MCP wrapper should call the core functions exported from `src/index.ts`. Pre
 - `getRoutineDefinition`
 - `searchSqlModules`
 
-Expose raw `runSelectQuery` only if needed, because ad-hoc SQL is the highest-risk surface even with validation.
+Use raw `runSelectQuery` sparingly, because ad-hoc SQL is the highest-risk surface even with validation.

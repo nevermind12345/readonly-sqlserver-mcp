@@ -2,7 +2,7 @@
 
 Read-only SQL Server inspection CLI and core library for approved dev/test databases.
 
-The current milestone is a CLI that exercises the same core code a future MCP server wrapper will expose to Codex. The project is intentionally conservative: SQL Server permissions are the primary safety boundary, and application-side checks are an extra guardrail.
+The CLI and MCP server share the same core code for SQL Server inspection. The project is intentionally conservative: SQL Server permissions are the primary safety boundary, and application-side checks are an extra guardrail.
 
 ## Status
 
@@ -171,6 +171,8 @@ Run locally over stdio only when `.env` is configured:
 npm run mcp
 ```
 
+This command waits for an MCP client on stdin/stdout. If you run it manually, it may look idle; press `Ctrl+C` to stop it.
+
 The MCP server exposes these tools:
 
 ```text
@@ -194,7 +196,7 @@ args = ['D:\MCP\readonly-sqlserver-mcp\dist\mcpServer.js']
 startup_timeout_sec = 30
 ```
 
-Then restart Codex. Keep `D:\MCP\readonly-sqlserver-mcp\.env` local and uncommitted; the MCP server loads it from the project root.
+Then restart Codex. Keep `D:\MCP\readonly-sqlserver-mcp\.env` local and uncommitted; the MCP server loads it from the project root. Run `npm run build` again after MCP source changes because Codex starts `dist\mcpServer.js`.
 
 ## Project Layout
 
